@@ -39,8 +39,8 @@ class Host(ConfigItem):
         return self.items[item]
 
     def __repr__(self):
-        return ('<Host name="' + self.name + '" devices=' +
-                len(self.devices) + '>')
+        return ('<Host name="' + str(self.name) + '" devices=' +
+                str(len(self.devices)) + '>')
 
     def add_device(self, device, member=None):
         if member and member <= len(self.devices):
@@ -62,7 +62,7 @@ class Interface(ConfigItem):
         super(Interface, self).__init__(**kwargs)
 
     def __repr__(self):
-        return '<Interface name="' + self.name + '">'
+        return '<Interface name="' + str(self.name) + '">'
 
 
 class VLAN(Interface):
@@ -70,12 +70,14 @@ class VLAN(Interface):
     VLAN definitions and configuration
     """
 
-    def __init__(self, number=1, name=None, ip_addr=None,
-                 subnet_mask=None, ports={}, **kwargs):
+    def __init__(self, number=1, name=None, address=None, mask=None,
+                 ports=None, **kwargs):
         kwargs.update(locals())
         del kwargs['self']
         del kwargs['kwargs']
         super(VLAN, self).__init__(**kwargs)
+        if not ports:
+            self.ports = {}
         self.ports['tagged'] = WeakSet()
         self.ports['untagged'] = WeakSet()
 
@@ -130,13 +132,16 @@ class Port(Interface):
     Physical Interface
     """
 
-    def __init__(self, name, number, descr=None, baseT=1000, speed='auto',
-                 duplex='auto', mode=None, vlans={}, **kwargs):
+    def __init__(self, name, number, enabled=False, description=None,
+                 speed=1000, speed_mode='auto', duplex='auto', vlans=None,
+                 address=None, mask=None, **kwargs):
         # Lazy parameter setting
         kwargs.update(locals())
         del kwargs['self']
         del kwargs['kwargs']
         super(Port, self).__init__(**kwargs)
+        if not self.vlans:
+            self.vlans = {}
         self.vlans['tagged'] = WeakSet()
         self.vlans['untagged'] = WeakSet()
 
@@ -145,6 +150,7 @@ class Port(Interface):
         Set a Vlan to be (un)tagged for this Port.
 
         :param vlan:
+        :param tagging:
         """
         if isinstance(tagging, str):
             tagging = (tagging, )
@@ -156,6 +162,7 @@ class Port(Interface):
         Set a Vlan to be (un)tagged for this Port.
 
         :param vlan:
+        :param tagging:
         """
         if isinstance(tagging, str):
             tagging = (tagging, )
@@ -200,9 +207,6 @@ class OOBM(Mgmt):
     Out-of-band Management interface configuration
     """
 
-    def __init__(self):
-        pass
-
 
 class Web(Mgmt):
     r"""
@@ -237,7 +241,7 @@ class DNS(IP):
     Domain settings
     """
 
-    def __init__(self, domain_name, servers=[], domain_list=None):
+    def __init__(self, domain_name, servers=None, domain_list=None):
         kwargs = locals()
         del kwargs['self']
         super(DNS, self).__init__(**kwargs)
@@ -267,8 +271,11 @@ class TACACS(Auth):
     r"""
     """
 
-    def __init__(self, servers=[], key='', timeout=1):
-        self.servers = servers
+    def __init__(self, servers=None, key='', timeout=1):
+        kwargs = locals()
+        del kwargs['self']
+        super(TACACS, self).__init__(**kwargs)
+        self.servers = servers if servers else []
         self.key = key
         self.timeout = timeout
 
@@ -278,9 +285,6 @@ class RADIUS(Auth):
     Stub
     """
 
-    def __init__(self):
-        pass
-
 
 class Password(Auth):
     r"""
@@ -288,6 +292,7 @@ class Password(Auth):
     """
     def __init__(self, password, encryption=None, privilege=None, **kwargs):
         kwargs.update(locals())
+        del kwargs['self']
         del kwargs['kwargs']
         super(Password, self).__init__(**kwargs)
 
@@ -306,8 +311,8 @@ class Logging(ConfigItem):
     Logging settings and services
     """
 
-    def __init__(self, levels=[], **kwargs):
-        kwargs.update({'levels': levels})
+    def __init__(self, levels=None, **kwargs):
+        kwargs.update({'levels': levels if levels else []})
         super(Logging, self).__init__(**kwargs)
         
         
@@ -315,8 +320,6 @@ class LocalLogging(ConfigItem):
     r"""
     In-buffer or to-local-disk logging
     """
-    def __init__(self, **kwargs):
-        super(LocalLogging, self).__init__(**kwargs)
 
 
 class LogServer(Logging):
@@ -384,7 +387,7 @@ class SNMPTraps(SNMP):
     r"""
     """
 
-    def __init__(self, traps=[]):
+    def __init__(self, traps=None):
         kwargs = locals()
         del kwargs['self']
         super(SNMP, self).__init__(**kwargs)
@@ -404,9 +407,6 @@ class STP(Discovery):
     Spanning-tree protocol
     """
 
-    def __init__(self):
-        pass
-
 
 class CDP(Discovery):
     r"""
@@ -414,7 +414,9 @@ class CDP(Discovery):
     """
 
     def __init__(self, enabled=False):
-        pass
+        kwargs = locals()
+        del kwargs['self']
+        super(CDP, self).__init__(**kwargs)
 
 
 class LLDP(Discovery):
@@ -423,11 +425,12 @@ class LLDP(Discovery):
     """
 
     def __init__(self, enabled=False):
-        pass
+        kwargs = locals()
+        del kwargs['self']
+        super(LLDP, self).__init__(**kwargs)
 
 
 # Time
-
 
 class Time(ConfigItem):
     r"""
@@ -435,9 +438,9 @@ class Time(ConfigItem):
     """
 
     def __init__(self, zone, offset=None, dst=None):
-        self.zone = zone
-        self.offset = offset
-        self.dst = dst
+        kwargs = locals()
+        del kwargs['self']
+        super(Time, self).__init__(**kwargs)
 
 
 class NTP(ConfigItem):
@@ -446,10 +449,9 @@ class NTP(ConfigItem):
     """
 
     def __init__(self, address, name='NTP', proto=None):
-        self.address = address
-        self.name = name
-        # TCP or UDP
-        self.proto = proto
+        kwargs = locals()
+        del kwargs['self']
+        super(NTP, self).__init__(**kwargs)
 
 # Quirks
 
@@ -472,11 +474,10 @@ class NotConvertible(ConfigItem):
     translatable
     """
 
-    def __init__(self, commands=[], **kwargs):
-        extras = locals()
-        del extras['self']
-        del extras['kwargs']
-        kwargs.update(extras)
+    def __init__(self, commands=None, **kwargs):
+        kwargs.update(locals())
+        del kwargs['self']
+        del kwargs['kwargs']
         super(NotConvertible, self).__init__(**kwargs)
 
 

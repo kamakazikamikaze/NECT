@@ -71,6 +71,7 @@ class BaseParser(object):
 
     def __init__(self, configuration, comment='!',
                  logfile=None, log_severity=2):
+        self.host = None
         self.parser = CiscoConfParse(
             configuration, factory=True, comment=comment)
         self.comment = comment
