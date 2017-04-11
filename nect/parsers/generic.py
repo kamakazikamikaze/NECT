@@ -2,6 +2,7 @@ from collections import defaultdict
 from ciscoconfparse import CiscoConfParse
 import logging
 from nect.items.generic import *
+from nect.helpers import ppdefaultdict
 from weakref import WeakValueDictionary
 from weakreflist import WeakList
 from functools import wraps
@@ -10,32 +11,6 @@ try:
     range = xrange
 except NameError:
     pass
-
-
-def chunker(seq, size):
-    """
-    Break an iterable into n-size chunks
-
-    See `Stack Overflow <http://stackoverflow.com/a/434328/1993468>`_ for more
-    information.
-
-    :param seq: Target iterable to go over
-    :param int size: Number of values to include in each chunk
-    :return: Sliced `seq`
-    :rtype: generator
-    """
-    # for pos in range(0, len(seq), size):
-    #     yield seq[pos:pos + size]
-    return (seq[pos:pos + size] for pos in range(0, len(seq), size))
-
-
-class ppdefaultdict(defaultdict):
-    """
-    Helper for cleaner ``pprint`` output.
-
-    Source comes from `Stack Overflow <http://stackoverflow.com/a/12925062>`_
-    """
-    __repr__ = dict.__repr__
 
 
 class BaseParser(object):
@@ -54,7 +29,9 @@ class BaseParser(object):
         If a given key does not exist in `self.items`, create it with an
         instance of the given value.
         
-        This mimics the functionality provided by ``defaultdict``.
+        This mimics the functionality provided by ``defaultdict``. This should
+        only be used to override the ``defaultdict`` value for ``Host`` (which
+        is a ``list``).
 
         :param keymodule: Class object to check for
         :param valmodule: Class to instantiate and assign if key does not exist
