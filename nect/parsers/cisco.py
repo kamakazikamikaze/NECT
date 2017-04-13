@@ -1,7 +1,7 @@
 from ciscoconfparse import CiscoPassword
 from collections import defaultdict
 from nect.parsers.generic import BaseParser
-from nect.helpers import keydefaultdict, chunker
+from nect.helpers import chunker, ensure_key, keydefaultdict, infinite_dd
 from nect.items.generic import *
 from weakref import WeakValueDictionary
 
@@ -36,6 +36,7 @@ class CiscoBaseParser(BaseParser):
     def device(self, conf):
         pass
 
+    @ensure_key(Logging, Logging)
     def _logging(self, conf):
         if conf.text.split()[1:] == 'host':
             self._log_server(conf)
@@ -87,83 +88,91 @@ class CiscoBaseParser(BaseParser):
         cmd = conf.text.split()[2:]
         # keydefaultdict will pass the key value as a parameter. Will add more
         # in the future
-        self.host[NTPServer][cmd[2]]
+        self.host[NTPServer][cmd[0]]
 
-    @ensure_key()
-    def time(self, conf):
+    def _time(self, conf):
         cmd = conf.text.split()[1:]
         if cmd[0] == 'timezone':
-            self.config['clock'].update({
-                    'zone': cmd[1],
-                    'hours-offset': cmd[2]
-                })
-            if len(cmd) == 4:
-                self.config['clock']['minutes-offset'] = cmd[3]
-        elif cmd[0] == 'summer-time':
-            if cmd[1] not in ('date', 'recurring'):
-                self.config['clock']['DST']['zone'] = cmd[1]
-                del cmd[1]
-            if cmd[1] == 'date':
-                pass
-            elif cmd[1] == 'recurring':
-                if ':' not in cmd[-1]:
-                    self.config['clock']['DST']['offset'] = cmd[-1]
-                    del cmd[-1]
-                # TODO
+            if not Time in self.host.items:
+                self.host.items[Time] = Time(cmd[1], cmd[2])
+            else:
+                try:
+                    self.host[Time].zone = cmd[1]
+                    self.host[Time].offset = cmd[2]
+                except IndexError:
+                    pass
+            # TODO: minutes-offset option
+            # if len(cmd) == 4:
+            #     self.config['clock']['minutes-offset'] = cmd[3]
+        # TODO
+        # elif cmd[0] == 'summer-time':
         else:
-            self.config['incompatible'].append(conf.ioscfg)
+            self.incompatible.append(NotConvertible(conf.ioscfg))
     
-    def aaa(self, conf):
+    @ensure_key(AAA, AAA)
+    def _aaa(self, conf):
         cmd = conf.text.split()
         if cmd[0] == 'tacacs-server':
-            if cmd[1] == 'host':
-                try:
-                    connection = cmd.index('single-connection')
-                    self.config['aaa']['tacacs']['hosts'][cmd[2]]['single-connection'] = True
-                    del cmd[connection]
-                except ValueError:
-                    pass
-                self.config['aaa']['tacacs']['hosts'][cmd[2]].update({
-                        key:value for key, value in chunker(cmd[3:], 2)
-                    })
-            elif cmd[1] == 'directed-request':
-                self.config['aaa']['tacacs'][cmd[1]] = True
-            elif cmd[1] == 'timeout':
-                self.config['aaa']['tacacs'][cmd[1]] = cmd[2]
-            elif cmd[1]== 'key':
-                self.config['aaa']['tacacs'][cmd[1]] = self.pass7.decrypt(cmd[3]) if cmd[2] == '7' else cmd[3]
-            else:
-                self.config['incompatible'].append(conf.ioscfg)
-
+            self._tacacs(conf)
         elif cmd[0] == 'aaa':
             if cmd[1] == 'new-model':
-                self.config['aaa']['enabled'] = True
+                self.host[AAA].enabled = True
             elif cmd[1] in ('accounting', 'authentication', 'authorization'):
-                self.config[cmd[0]][cmd[1]][cmd[2]][cmd[3]] = cmd[4:]
+                getattr(self.host[AAA], cmd[1])[cmd[2]][cmd[3]] = cmd[4:]
+                # self.host[AAA][cmd[1]][cmd[2]][cmd[3]] = cmd[4:]
         else:
-            self.config['incompatible'].append(conf.ioscfg)
+            self.incompatible.append(NotConvertible(conf.ioscfg))
 
-    def ip(self, conf):
+    @ensure_key(TACACS, TACACS)
+    def _tacacs(self, conf):
+        cmd = conf.text.split()[1:]
+        if not hasattr(self.host[TACACS], 'extra'):
+            self.host[TACACS].extra = infinite_dd()
+        if cmd[0] == 'host':
+            try:
+                connection = cmd.index('single-connection')
+                self.host[TACACS].extra[cmd[1]]['single-connection'] = True
+                del cmd[connection]
+            except ValueError:
+                pass
+            finally:
+                self.host[TACACS].extra[cmd[1]].update({
+                    key:value for key, value in chunker(cmd[2:], 2)
+                })
+        elif cmd[0] == 'directed-request':
+            self.host[TACACS].extra[cmd[0]] = True
+        elif cmd[0] == 'timeout':
+            self.host[TACACS].timeout = int(cmd[1])
+        elif cmd[0]== 'key':
+            self.host[TACACS].key = self.pass7.decrypt(cmd[2]) if cmd[1] == '7' else cmd[2]
+        else:
+            self.incompatible.append(NotConvertible(conf.ioscfg))
+
+    @ensure_key(DNS, DNS)
+    def _ip(self, conf):
         cmd = conf.text.split()[1:]
         if cmd[0] == 'default-gateway':
-            self.config['ip']['default-gateway'] = cmd[1]
+            self.host.default_gateway = cmd[1]
         elif cmd[0] == 'domain-name':
-            self.config['ip']['dns']['domain-name'] = cmd[1]
+            self.host[DNS].domain_name = cmd[1]
+            # self.config['ip']['dns']['domain-name'] = cmd[1]
         elif cmd[0] == 'domain-list':
-            if not 'domain-list' in self.config['ip']['dns']:
-                self.config['ip']['dns']['domain-list'] = []
-            self.config['ip']['dns']['domain-list'].append(cmd[1])
+            self.host[DNS].domain_list.append(cmd[1])
+            # if not 'domain-list' in self.config['ip']['dns']:
+            #     self.config['ip']['dns']['domain-list'] = []
+            # self.config['ip']['dns']['domain-list'].append(cmd[1])
         elif cmd[0] == 'name-server':
-            if not 'servers' in self.config['ip']['dns']:
-                self.config['ip']['dns']['servers'] = []
-            self.config['ip']['dns']['servers'].append(cmd[1])
+            # if not 'servers' in self.config['ip']['dns']:
+            #     self.config['ip']['dns']['servers'] = []
+            # self.config['ip']['dns']['servers'].append(cmd[1])
+            self.host[DNS].name_servers.append(cmd[1])
         else:
-            self.config['incompatible'].append(conf.ioscfg)
+            self.incompatible.append(NotConvertible(conf.ioscfg))
 
-    def stp(self, conf):
-        self.config['incompatible'].append(conf.ioscfg)
+    def _stp(self, conf):
+        self.incompatible.append(NotConvertible(conf.ioscfg))
 
-    def snmp(self, conf):
-        self.config['incompatible'].append(conf.ioscfg)
+    def _snmp(self, conf):
+        self.incompatible.append(NotConvertible(conf.ioscfg))
 
 

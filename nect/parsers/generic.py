@@ -2,10 +2,8 @@ from collections import defaultdict
 from ciscoconfparse import CiscoConfParse
 import logging
 from nect.items.generic import *
-from nect.helpers import ppdefaultdict
 from weakref import WeakValueDictionary
 from weakreflist import WeakList
-from functools import wraps
 
 try:
     range = xrange
@@ -14,38 +12,6 @@ except NameError:
 
 
 class BaseParser(object):
-
-    @classmethod
-    def infinite_dd(cls):
-        # return defaultdict(cls.infinite_dd)
-        return ppdefaultdict(cls.infinite_dd)
-
-    # This decorator is declared and called within the class. Due to this, both
-    # the class name and instance technically do not yet exist, so `self` is
-    # not actually passed in by the interpreter until we reach the wrapper.
-    # This is the first item in *args
-    def ensure_key(keymodule, valmodule):
-        r"""
-        If a given key does not exist in `self.items`, create it with an
-        instance of the given value.
-        
-        This mimics the functionality provided by ``defaultdict``. This should
-        only be used to override the ``defaultdict`` value for ``Host`` (which
-        is a ``list``).
-
-        :param keymodule: Class object to check for
-        :param valmodule: Class to instantiate and assign if key does not exist
-        """
-
-        def decorate(func):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                if keymodule not in self.host.items:
-                    self.host.items[keymodule] = valmodule()
-                return func(self, *args, **kwargs)
-            return wrapper
-        return decorate
-
     def __init__(self, configuration, comment='!',
                  logfile=None, log_severity=2):
         self.host = None
